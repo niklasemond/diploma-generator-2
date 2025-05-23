@@ -19,6 +19,7 @@ UPLOAD_FOLDER = 'uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 ALLOWED_EXTENSIONS = {'pdf', 'txt'}
 
@@ -98,36 +99,45 @@ def upload_files():
             flash('Invalid file type')
             return redirect(request.url)
         
-        # Save the template file
-        template_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(template_file.filename))
-        template_file.save(template_path)
-        
-        # Read names from the text file
-        names = [line.strip() for line in names_file.readlines() if line.strip()]
-        
-        # Create a temporary directory for generated PDFs
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Generate PDFs for each name
-            for name in names:
-                output_pdf = create_pdf_with_name(template_path, name, placeholder)
-                output_path = os.path.join(temp_dir, f"{name}.pdf")
-                with open(output_path, 'wb') as output_file:
-                    output_pdf.write(output_file)
+        try:
+            # Save the template file
+            template_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(template_file.filename))
+            template_file.save(template_path)
             
-            # Create a zip file containing all PDFs
-            import zipfile
-            zip_path = os.path.join(temp_dir, 'diplomas.zip')
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        if file.endswith('.pdf'):
-                            file_path = os.path.join(root, file)
-                            zipf.write(file_path, os.path.basename(file_path))
+            # Read names from the text file
+            names = [line.strip() for line in names_file.readlines() if line.strip()]
             
-            # Send the zip file
-            return send_file(zip_path, as_attachment=True, download_name='diplomas.zip')
+            # Create a temporary directory for generated PDFs
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Generate PDFs for each name
+                for name in names:
+                    output_pdf = create_pdf_with_name(template_path, name, placeholder)
+                    output_path = os.path.join(temp_dir, f"{name}.pdf")
+                    with open(output_path, 'wb') as output_file:
+                        output_pdf.write(output_file)
+                
+                # Create a zip file containing all PDFs
+                import zipfile
+                zip_path = os.path.join(temp_dir, 'diplomas.zip')
+                with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            if file.endswith('.pdf'):
+                                file_path = os.path.join(root, file)
+                                zipf.write(file_path, os.path.basename(file_path))
+                
+                # Send the zip file
+                return send_file(zip_path, as_attachment=True, download_name='diplomas.zip')
+        except Exception as e:
+            flash(f'Error processing files: {str(e)}')
+            return redirect(request.url)
+        finally:
+            # Clean up the template file
+            if os.path.exists(template_path):
+                os.remove(template_path)
     
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port) 
