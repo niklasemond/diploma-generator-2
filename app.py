@@ -140,7 +140,10 @@ def create_pdf_with_name(template_path, name, placeholder):
     output = PdfWriter()
     
     # Process each page
-    for page in template.pages:
+    for i in range(len(template.pages)):
+        # Get the page
+        page = template.pages[i]
+        
         # Create a new page with the same content
         new_page = page
         
@@ -157,8 +160,10 @@ def create_pdf_with_name(template_path, name, placeholder):
             # Merge the clean PDF to remove the placeholder
             new_page.merge_page(clean_pdf.pages[0])
         
-        # Merge the name PDF
-        new_page.merge_page(new_pdf.pages[0])
+        # Only merge the name PDF on the first page
+        if i == 0:
+            new_page.merge_page(new_pdf.pages[0])
+        
         output.add_page(new_page)
     
     # Close the PyMuPDF document
