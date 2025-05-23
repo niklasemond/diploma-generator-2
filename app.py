@@ -23,8 +23,35 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 ALLOWED_EXTENSIONS = {'pdf', 'txt'}
 
+# Register the MontessoriScript font
+FONT_PATH = os.path.join(os.path.dirname(__file__), 'fonts', 'MontessoriScript.ttf')
+pdfmetrics.registerFont(TTFont('MontessoriScript', FONT_PATH))
+
+# Font mapping for common PDF fonts to system fonts
+FONT_MAPPING = {
+    'MontessoriScript': 'MontessoriScript',  # Use our embedded font
+    'Times-Roman': 'Times-Roman',
+    'Times-Bold': 'Times-Bold',
+    'Times-Italic': 'Times-Italic',
+    'Times-BoldItalic': 'Times-BoldItalic',
+    'Helvetica': 'Helvetica',
+    'Helvetica-Bold': 'Helvetica-Bold',
+    'Helvetica-Oblique': 'Helvetica-Oblique',
+    'Helvetica-BoldOblique': 'Helvetica-BoldOblique',
+    'Courier': 'Courier',
+    'Courier-Bold': 'Courier-Bold',
+    'Courier-Oblique': 'Courier-Oblique',
+    'Courier-BoldOblique': 'Courier-BoldOblique',
+}
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def get_system_font(font_name):
+    """Convert PDF font name to a system font that ReportLab can use."""
+    # Remove any subset prefix (e.g., "ABCDEF+MontessoriScript" -> "MontessoriScript")
+    base_font = font_name.split('+')[-1]
+    return FONT_MAPPING.get(base_font, 'Helvetica')
 
 def create_pdf_with_name(template_path, name, placeholder):
     # Open the PDF with PyMuPDF
@@ -59,7 +86,10 @@ def create_pdf_with_name(template_path, name, placeholder):
     if not font_size:
         font_size = 12
     if not font_name:
-        font_name = "Helvetica"
+        font_name = "MontessoriScript"  # Default to MontessoriScript
+    
+    # Convert PDF font to system font
+    system_font = get_system_font(font_name)
     
     # Create a new PDF with the name
     packet = io.BytesIO()
@@ -71,8 +101,8 @@ def create_pdf_with_name(template_path, name, placeholder):
     width = rect.width
     height = rect.height
     
-    # Add the name text with the same font and size as the placeholder
-    can.setFont(font_name, font_size)
+    # Add the name text with the system font
+    can.setFont(system_font, font_size)
     can.setFillColor(Color(0, 0, 0))  # Black color
     
     # Draw the name centered in the placeholder's rectangle
