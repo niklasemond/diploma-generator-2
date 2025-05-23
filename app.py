@@ -144,17 +144,11 @@ def create_pdf_with_name(template_path, name, placeholder):
         # Close the document
         doc.close()
         
-        # Create a new PDF reader from the temporary file
-        output = PdfReader(temp_output)
-        writer = PdfWriter()
-        
-        # Copy all pages to the writer
-        for page in output.pages:
-            writer.add_page(page)
-        
-        return writer
+        return temp_output
     except Exception as e:
         logger.error(f"Error in create_pdf_with_name: {str(e)}")
+        if 'doc' in locals():
+            doc.close()
         raise
 
 @app.route('/', methods=['GET', 'POST'])
@@ -213,12 +207,20 @@ def upload_files():
                     for name in names:
                         try:
                             logger.info(f"Processing name: {name}")
-                            output_pdf = create_pdf_with_name(template_path, name, placeholder)
+                            # Get the PDF as a BytesIO object
+                            pdf_bytes = create_pdf_with_name(template_path, name, placeholder)
+                            
                             # Create a clean filename from the name, preserving Swedish characters
                             clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', 'Å', 'Ä', 'Ö', 'å', 'ä', 'ö')).strip()
                             output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
+                            
+                            # Write the PDF to disk
                             with open(output_path, 'wb') as output_file:
-                                output_pdf.write(output_file)
+                                output_file.write(pdf_bytes.getvalue())
+                            
+                            # Clean up the BytesIO object
+                            pdf_bytes.close()
+                            
                         except ValueError as ve:
                             flash(f'Error processing name "{name}": {str(ve)}')
                             return redirect(request.url)
