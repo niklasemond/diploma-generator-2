@@ -69,7 +69,8 @@ def create_pdf_with_name(template_path, name, placeholder):
     if len(doc) == 0:
         raise ValueError("The template PDF is empty")
     
-    page = doc[0]  # Get first page
+    # Get the first page
+    page = doc[0]
     
     # Search for the placeholder text
     text_instances = page.search_for(placeholder)
@@ -101,75 +102,45 @@ def create_pdf_with_name(template_path, name, placeholder):
     if not font_name:
         font_name = DEFAULT_FONT
     
-    # Convert PDF font to system font
-    system_font = get_system_font(font_name)
+    # Remove the placeholder text
+    page.add_redact_annot(rect)
+    page.apply_redactions()
     
-    # Create a new PDF with the name
-    packet = io.BytesIO()
-    can = canvas.Canvas(packet, pagesize=(page.rect.width, page.rect.height))
-    
-    # Calculate the position and size
-    x = rect.x0
-    y = page.rect.height - rect.y1  # Convert from PDF coordinates to canvas coordinates
-    width = rect.width
-    height = rect.height
-    
-    # Add the name text with the system font
-    can.setFont(system_font, font_size)
-    can.setFillColor(Color(0, 0, 0))  # Black color
-    
-    # Ensure the name is properly encoded and handle Swedish characters
+    # Ensure the name is properly encoded
     if isinstance(name, bytes):
         name = name.decode('utf-8')
     
-    # Draw the name centered in the placeholder's rectangle
-    # Use drawString instead of drawCentredString for better character support
-    text_width = can.stringWidth(name, system_font, font_size)
-    x_centered = x + (width - text_width) / 2
-    y_centered = y + (height - font_size) / 2
-    can.drawString(x_centered, y_centered, name)
+    # Calculate text position
+    text_width = fitz.get_text_length(name, fontname=font_name, fontsize=font_size)
+    x_centered = rect.x0 + (rect.width - text_width) / 2
+    y_centered = rect.y0 + (rect.height - font_size) / 2
     
-    can.save()
+    # Insert the name text
+    page.insert_text(
+        (x_centered, y_centered),
+        name,
+        fontname=font_name,
+        fontsize=font_size,
+        color=(0, 0, 0)
+    )
     
-    # Move to the beginning of the StringIO buffer
-    packet.seek(0)
-    new_pdf = PdfReader(packet)
+    # Save to a temporary file
+    temp_output = io.BytesIO()
+    doc.save(temp_output)
+    temp_output.seek(0)
     
-    # Read the template PDF
-    template = PdfReader(template_path)
-    output = PdfWriter()
-    
-    # Process each page
-    for i in range(len(template.pages)):
-        # Get the page
-        page = template.pages[i]
-        
-        # Create a new page with the same content
-        new_page = page
-        
-        # Remove the placeholder text by replacing it with an empty string
-        page_text = page.extract_text()
-        if placeholder in page_text:
-            # Create a new PDF without the placeholder text
-            packet_clean = io.BytesIO()
-            can_clean = canvas.Canvas(packet_clean, pagesize=(page.mediabox.width, page.mediabox.height))
-            can_clean.save()
-            packet_clean.seek(0)
-            clean_pdf = PdfReader(packet_clean)
-            
-            # Merge the clean PDF to remove the placeholder
-            new_page.merge_page(clean_pdf.pages[0])
-        
-        # Only merge the name PDF on the first page
-        if i == 0:
-            new_page.merge_page(new_pdf.pages[0])
-        
-        output.add_page(new_page)
-    
-    # Close the PyMuPDF document
+    # Close the document
     doc.close()
     
-    return output
+    # Create a new PDF reader from the temporary file
+    output = PdfReader(temp_output)
+    writer = PdfWriter()
+    
+    # Copy all pages to the writer
+    for page in output.pages:
+        writer.add_page(page)
+    
+    return writer
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_files():
