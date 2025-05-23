@@ -3,7 +3,12 @@ services:
     name: diploma-generator
     env: python
     buildCommand: chmod +x deploy.sh && ./deploy.sh
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0 
+        value: 3.11.0
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    plan: free
+    healthCheckPath: /
+    autoDeploy: true 
