@@ -23,13 +23,21 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 ALLOWED_EXTENSIONS = {'pdf', 'txt'}
 
-# Register the MontessoriScript font
+# Font configuration
 FONT_PATH = os.path.join(os.path.dirname(__file__), 'fonts', 'MontessoriScript.ttf')
-pdfmetrics.registerFont(TTFont('MontessoriScript', FONT_PATH))
+DEFAULT_FONT = 'Helvetica'
+
+# Try to register the MontessoriScript font, fall back to Helvetica if not available
+try:
+    if os.path.exists(FONT_PATH):
+        pdfmetrics.registerFont(TTFont('MontessoriScript', FONT_PATH))
+        DEFAULT_FONT = 'MontessoriScript'
+except Exception as e:
+    print(f"Warning: Could not load MontessoriScript font: {e}")
 
 # Font mapping for common PDF fonts to system fonts
 FONT_MAPPING = {
-    'MontessoriScript': 'MontessoriScript',  # Use our embedded font
+    'MontessoriScript': DEFAULT_FONT,  # Use our embedded font or fallback
     'Times-Roman': 'Times-Roman',
     'Times-Bold': 'Times-Bold',
     'Times-Italic': 'Times-Italic',
@@ -51,7 +59,7 @@ def get_system_font(font_name):
     """Convert PDF font name to a system font that ReportLab can use."""
     # Remove any subset prefix (e.g., "ABCDEF+MontessoriScript" -> "MontessoriScript")
     base_font = font_name.split('+')[-1]
-    return FONT_MAPPING.get(base_font, 'Helvetica')
+    return FONT_MAPPING.get(base_font, DEFAULT_FONT)
 
 def create_pdf_with_name(template_path, name, placeholder):
     # Open the PDF with PyMuPDF
@@ -86,7 +94,7 @@ def create_pdf_with_name(template_path, name, placeholder):
     if not font_size:
         font_size = 12
     if not font_name:
-        font_name = "MontessoriScript"  # Default to MontessoriScript
+        font_name = DEFAULT_FONT
     
     # Convert PDF font to system font
     system_font = get_system_font(font_name)
