@@ -64,6 +64,11 @@ def get_system_font(font_name):
 def create_pdf_with_name(template_path, name, placeholder):
     # Open the PDF with PyMuPDF
     doc = fitz.open(template_path)
+    
+    # Check if the PDF has any pages
+    if len(doc) == 0:
+        raise ValueError("The template PDF is empty")
+    
     page = doc[0]  # Get first page
     
     # Search for the placeholder text
@@ -148,6 +153,9 @@ def create_pdf_with_name(template_path, name, placeholder):
         new_page.merge_page(new_pdf.pages[0])
         output.add_page(new_page)
     
+    # Close the PyMuPDF document
+    doc.close()
+    
     return output
 
 @app.route('/', methods=['GET', 'POST'])
@@ -174,6 +182,7 @@ def upload_files():
             flash('Invalid file type')
             return redirect(request.url)
         
+        template_path = None
         try:
             # Save the template file
             template_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(template_file.filename))
@@ -182,16 +191,27 @@ def upload_files():
             # Read names from the text file
             names = [line.strip() for line in names_file.readlines() if line.strip()]
             
+            if not names:
+                flash('The names file is empty')
+                return redirect(request.url)
+            
             # Create a temporary directory for generated PDFs
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Generate PDFs for each name
                 for name in names:
-                    output_pdf = create_pdf_with_name(template_path, name, placeholder)
-                    # Create a clean filename from the name
-                    clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
-                    output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
-                    with open(output_path, 'wb') as output_file:
-                        output_pdf.write(output_file)
+                    try:
+                        output_pdf = create_pdf_with_name(template_path, name, placeholder)
+                        # Create a clean filename from the name
+                        clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
+                        output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
+                        with open(output_path, 'wb') as output_file:
+                            output_pdf.write(output_file)
+                    except ValueError as ve:
+                        flash(f'Error processing name "{name}": {str(ve)}')
+                        return redirect(request.url)
+                    except Exception as e:
+                        flash(f'Error processing name "{name}": {str(e)}')
+                        return redirect(request.url)
                 
                 # Create a zip file containing all PDFs
                 import zipfile
@@ -205,12 +225,15 @@ def upload_files():
                 
                 # Send the zip file
                 return send_file(zip_path, as_attachment=True, download_name='diplomas.zip')
+        except ValueError as ve:
+            flash(f'Error: {str(ve)}')
+            return redirect(request.url)
         except Exception as e:
             flash(f'Error processing files: {str(e)}')
             return redirect(request.url)
         finally:
             # Clean up the template file
-            if os.path.exists(template_path):
+            if template_path and os.path.exists(template_path):
                 os.remove(template_path)
     
     return render_template('index.html')
