@@ -27,7 +27,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def create_pdf_with_name(template_path, name, placeholder):
-    # Open the PDF with PyMuPDF to get precise text positions
+    # Open the PDF with PyMuPDF
     doc = fitz.open(template_path)
     page = doc[0]  # Get first page
     
@@ -40,6 +40,27 @@ def create_pdf_with_name(template_path, name, placeholder):
     # Get the first instance of the placeholder
     rect = text_instances[0]
     
+    # Get the font information from the placeholder text
+    text_blocks = page.get_text("dict")["blocks"]
+    font_size = None
+    font_name = None
+    
+    for block in text_blocks:
+        if "lines" in block:
+            for line in block["lines"]:
+                if "spans" in line:
+                    for span in line["spans"]:
+                        if placeholder in span["text"]:
+                            font_size = span["size"]
+                            font_name = span["font"]
+                            break
+    
+    # If we couldn't find the font information, use defaults
+    if not font_size:
+        font_size = 12
+    if not font_name:
+        font_name = "Helvetica"
+    
     # Create a new PDF with the name
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=(page.rect.width, page.rect.height))
@@ -50,8 +71,8 @@ def create_pdf_with_name(template_path, name, placeholder):
     width = rect.width
     height = rect.height
     
-    # Add the name text
-    can.setFont("Helvetica", height * 0.8)  # Scale font size based on placeholder height
+    # Add the name text with the same font and size as the placeholder
+    can.setFont(font_name, font_size)
     can.setFillColor(Color(0, 0, 0))  # Black color
     
     # Draw the name centered in the placeholder's rectangle
@@ -69,9 +90,25 @@ def create_pdf_with_name(template_path, name, placeholder):
     
     # Process each page
     for page in template.pages:
-        # Merge the name PDF with the template
-        page.merge_page(new_pdf.pages[0])
-        output.add_page(page)
+        # Create a new page with the same content
+        new_page = page
+        
+        # Remove the placeholder text by replacing it with an empty string
+        page_text = page.extract_text()
+        if placeholder in page_text:
+            # Create a new PDF without the placeholder text
+            packet_clean = io.BytesIO()
+            can_clean = canvas.Canvas(packet_clean, pagesize=(page.mediabox.width, page.mediabox.height))
+            can_clean.save()
+            packet_clean.seek(0)
+            clean_pdf = PdfReader(packet_clean)
+            
+            # Merge the clean PDF to remove the placeholder
+            new_page.merge_page(clean_pdf.pages[0])
+        
+        # Merge the name PDF
+        new_page.merge_page(new_pdf.pages[0])
+        output.add_page(new_page)
     
     return output
 
@@ -112,7 +149,9 @@ def upload_files():
                 # Generate PDFs for each name
                 for name in names:
                     output_pdf = create_pdf_with_name(template_path, name, placeholder)
-                    output_path = os.path.join(temp_dir, f"{name}.pdf")
+                    # Create a clean filename from the name
+                    clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
+                    output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
                     with open(output_path, 'wb') as output_file:
                         output_pdf.write(output_file)
                 
@@ -120,11 +159,11 @@ def upload_files():
                 import zipfile
                 zip_path = os.path.join(temp_dir, 'diplomas.zip')
                 with zipfile.ZipFile(zip_path, 'w') as zipf:
-                    for root, dirs, files in os.walk(temp_dir):
-                        for file in files:
-                            if file.endswith('.pdf'):
-                                file_path = os.path.join(root, file)
-                                zipf.write(file_path, os.path.basename(file_path))
+                    for file in os.listdir(temp_dir):
+                        if file.endswith('.pdf'):
+                            file_path = os.path.join(temp_dir, file)
+                            # Add files directly to the root of the zip
+                            zipf.write(file_path, file)
                 
                 # Send the zip file
                 return send_file(zip_path, as_attachment=True, download_name='diplomas.zip')
