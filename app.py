@@ -118,8 +118,16 @@ def create_pdf_with_name(template_path, name, placeholder):
     can.setFont(system_font, font_size)
     can.setFillColor(Color(0, 0, 0))  # Black color
     
+    # Ensure the name is properly encoded and handle Swedish characters
+    if isinstance(name, bytes):
+        name = name.decode('utf-8')
+    
     # Draw the name centered in the placeholder's rectangle
-    can.drawCentredString(x + width/2, y + height/2, name)
+    # Use drawString instead of drawCentredString for better character support
+    text_width = can.stringWidth(name, system_font, font_size)
+    x_centered = x + (width - text_width) / 2
+    y_centered = y + (height - font_size) / 2
+    can.drawString(x_centered, y_centered, name)
     
     can.save()
     
@@ -188,8 +196,18 @@ def upload_files():
             template_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(template_file.filename))
             template_file.save(template_path)
             
-            # Read names from the text file
-            names = [line.strip() for line in names_file.readlines() if line.strip()]
+            # Read names from the text file with UTF-8 encoding
+            names_file.seek(0)
+            content = names_file.read()
+            try:
+                # Try to decode as UTF-8
+                decoded_content = content.decode('utf-8')
+            except UnicodeDecodeError:
+                # If UTF-8 fails, try with latin-1 (which can handle Swedish characters)
+                decoded_content = content.decode('latin-1')
+            
+            # Split into lines and clean up
+            names = [line.strip() for line in decoded_content.splitlines() if line.strip()]
             
             if not names:
                 flash('The names file is empty')
@@ -200,9 +218,13 @@ def upload_files():
                 # Generate PDFs for each name
                 for name in names:
                     try:
+                        # Ensure name is a string and properly encoded
+                        if isinstance(name, bytes):
+                            name = name.decode('utf-8')
+                        
                         output_pdf = create_pdf_with_name(template_path, name, placeholder)
-                        # Create a clean filename from the name
-                        clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
+                        # Create a clean filename from the name, preserving Swedish characters
+                        clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', 'Å', 'Ä', 'Ö', 'å', 'ä', 'ö')).strip()
                         output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
                         with open(output_path, 'wb') as output_file:
                             output_pdf.write(output_file)
