@@ -1,5 +1,6 @@
 import os
 import logging
+import gc
 from flask import Flask, request, render_template, send_file, flash, redirect, url_for
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfReader, PdfWriter
@@ -70,6 +71,7 @@ def get_system_font(font_name):
     return FONT_MAPPING.get(base_font, DEFAULT_FONT)
 
 def create_pdf_with_name(template_path, name, placeholder):
+    doc = None
     try:
         logger.info(f"Processing PDF for name: {name}")
         # Open the PDF with PyMuPDF
@@ -141,15 +143,53 @@ def create_pdf_with_name(template_path, name, placeholder):
         doc.save(temp_output)
         temp_output.seek(0)
         
-        # Close the document
-        doc.close()
-        
         return temp_output
     except Exception as e:
         logger.error(f"Error in create_pdf_with_name: {str(e)}")
-        if 'doc' in locals():
-            doc.close()
         raise
+    finally:
+        if doc:
+            doc.close()
+        gc.collect()
+
+def process_names_in_batches(names, template_path, placeholder, temp_dir, batch_size=2):
+    """Process names in smaller batches to manage memory usage."""
+    for i in range(0, len(names), batch_size):
+        batch = names[i:i + batch_size]
+        logger.info(f"Processing batch {i//batch_size + 1} of {(len(names) + batch_size - 1)//batch_size}")
+        
+        for name in batch:
+            try:
+                logger.info(f"Processing name: {name}")
+                # Get the PDF as a BytesIO object
+                pdf_bytes = create_pdf_with_name(template_path, name, placeholder)
+                
+                # Create a clean filename from the name, preserving Swedish characters
+                clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', 'Å', 'Ä', 'Ö', 'å', 'ä', 'ö')).strip()
+                output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
+                
+                # Write the PDF to disk
+                with open(output_path, 'wb') as output_file:
+                    output_file.write(pdf_bytes.getvalue())
+                
+                # Clean up the BytesIO object
+                pdf_bytes.close()
+                
+            except ValueError as ve:
+                flash(f'Error processing name "{name}": {str(ve)}')
+                return False
+            except Exception as e:
+                logger.error(f"Error processing name {name}: {str(e)}")
+                flash(f'Error processing name "{name}": {str(e)}')
+                return False
+            
+            # Force garbage collection after each name
+            gc.collect()
+        
+        # Force garbage collection after each batch
+        gc.collect()
+    
+    return True
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_files():
@@ -203,31 +243,9 @@ def upload_files():
                 
                 # Create a temporary directory for generated PDFs
                 with tempfile.TemporaryDirectory() as temp_dir:
-                    # Generate PDFs for each name
-                    for name in names:
-                        try:
-                            logger.info(f"Processing name: {name}")
-                            # Get the PDF as a BytesIO object
-                            pdf_bytes = create_pdf_with_name(template_path, name, placeholder)
-                            
-                            # Create a clean filename from the name, preserving Swedish characters
-                            clean_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', 'Å', 'Ä', 'Ö', 'å', 'ä', 'ö')).strip()
-                            output_path = os.path.join(temp_dir, f"{clean_name}.pdf")
-                            
-                            # Write the PDF to disk
-                            with open(output_path, 'wb') as output_file:
-                                output_file.write(pdf_bytes.getvalue())
-                            
-                            # Clean up the BytesIO object
-                            pdf_bytes.close()
-                            
-                        except ValueError as ve:
-                            flash(f'Error processing name "{name}": {str(ve)}')
-                            return redirect(request.url)
-                        except Exception as e:
-                            logger.error(f"Error processing name {name}: {str(e)}")
-                            flash(f'Error processing name "{name}": {str(e)}')
-                            return redirect(request.url)
+                    # Process names in batches
+                    if not process_names_in_batches(names, template_path, placeholder, temp_dir):
+                        return redirect(request.url)
                     
                     # Create a zip file containing all PDFs
                     import zipfile
@@ -252,6 +270,8 @@ def upload_files():
                 # Clean up the template file
                 if template_path and os.path.exists(template_path):
                     os.remove(template_path)
+                # Force garbage collection
+                gc.collect()
         except Exception as e:
             logger.error(f"Unexpected error in upload_files: {str(e)}")
             flash(f'An unexpected error occurred: {str(e)}')
