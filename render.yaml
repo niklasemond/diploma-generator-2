@@ -3,7 +3,7 @@ services:
     name: diploma-generator
     env: python
     buildCommand: chmod +x deploy.sh && ./deploy.sh
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 1 --timeout 300 --max-requests 1 --max-requests-jitter 0
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --max-requests 1000 --max-requests-jitter 50 --worker-class gthread
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -11,6 +11,8 @@ services:
         value: "1"
       - key: PYTHONMALLOC
         value: "malloc"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
     plan: free
     healthCheckPath: /
     autoDeploy: true 

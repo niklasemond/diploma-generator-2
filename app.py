@@ -116,9 +116,14 @@ def create_pdf_with_name(template_path, name, placeholder):
         
         logger.info(f"Using font: {font_name} with size: {font_size}")
         
+        # Create a new PDF with just the first page
+        new_doc = fitz.open()
+        new_doc.insert_pdf(doc, from_page=0, to_page=0)
+        new_page = new_doc[0]
+        
         # Remove the placeholder text
-        page.add_redact_annot(rect)
-        page.apply_redactions()
+        new_page.add_redact_annot(rect)
+        new_page.apply_redactions()
         
         # Ensure the name is properly encoded
         if isinstance(name, bytes):
@@ -130,7 +135,7 @@ def create_pdf_with_name(template_path, name, placeholder):
         y_centered = rect.y0 + (rect.height - font_size) / 2
         
         # Insert the name text
-        page.insert_text(
+        new_page.insert_text(
             (x_centered, y_centered),
             name,
             fontname=font_name,
@@ -140,7 +145,7 @@ def create_pdf_with_name(template_path, name, placeholder):
         
         # Save to a temporary file
         temp_output = io.BytesIO()
-        doc.save(temp_output)
+        new_doc.save(temp_output)
         temp_output.seek(0)
         
         return temp_output
@@ -150,9 +155,11 @@ def create_pdf_with_name(template_path, name, placeholder):
     finally:
         if doc:
             doc.close()
+        if 'new_doc' in locals():
+            new_doc.close()
         gc.collect()
 
-def process_names_in_batches(names, template_path, placeholder, temp_dir, batch_size=2):
+def process_names_in_batches(names, template_path, placeholder, temp_dir, batch_size=1):
     """Process names in smaller batches to manage memory usage."""
     for i in range(0, len(names), batch_size):
         batch = names[i:i + batch_size]
