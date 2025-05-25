@@ -80,26 +80,9 @@ def create_pdf_with_name(template_path, name, placeholder):
         # Get the first instance of the placeholder
         rect = text_instances[0]
         
-        # Get the font information from the placeholder text
-        text_blocks = page.get_text("dict")["blocks"]
-        font_size = None
-        font_name = None
-        
-        for block in text_blocks:
-            if "lines" in block:
-                for line in block["lines"]:
-                    if "spans" in line:
-                        for span in line["spans"]:
-                            if placeholder in span["text"]:
-                                font_size = span["size"]
-                                font_name = span["font"]
-                                break
-        
-        # If we couldn't find the font information, use defaults
-        if not font_size:
-            font_size = 12
-        if not font_name:
-            font_name = DEFAULT_FONT
+        # Force use of Times-Roman font
+        font_name = 'Times-Roman'
+        font_size = 28  # Set a reasonable default size
         
         logger.info(f"Using font: {font_name} with size: {font_size}")
         
