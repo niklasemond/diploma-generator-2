@@ -58,75 +58,58 @@ def get_system_font(font_name):
     return FONT_MAPPING.get(base_font, DEFAULT_FONT)
 
 def create_pdf_with_name(template_path, name, placeholder):
-    doc = None
     try:
         logger.info(f"Processing PDF for name: {name}")
-        # Open the PDF with PyMuPDF
-        doc = fitz.open(template_path)
         
-        # Check if the PDF has any pages
-        if len(doc) == 0:
+        # Read the template PDF
+        reader = PdfReader(template_path)
+        if len(reader.pages) == 0:
             raise ValueError("The template PDF is empty")
         
+        # Create a new PDF
+        writer = PdfWriter()
+        
         # Get the first page
-        page = doc[0]
+        page = reader.pages[0]
         
-        # Search for the placeholder text
-        text_instances = page.search_for(placeholder)
+        # Create a new page with the name
+        packet = io.BytesIO()
+        can = canvas.Canvas(packet, pagesize=letter)
         
-        if not text_instances:
-            raise ValueError(f"Placeholder text '{placeholder}' not found in the template")
+        # Set font and size
+        can.setFont("Times-Roman", 28)
         
-        # Get the first instance of the placeholder
-        rect = text_instances[0]
+        # Calculate text width for centering
+        text_width = can.stringWidth(name, "Times-Roman", 28)
+        page_width = float(page.mediabox.width)
+        x = (page_width - text_width) / 2
         
-        # Force use of Times-Roman font
-        font_name = 'Times-Roman'
-        font_size = 28  # Set a reasonable default size
+        # Draw the text
+        can.drawString(x, 400, name)  # y=400 is a reasonable position, adjust if needed
+        can.save()
         
-        logger.info(f"Using font: {font_name} with size: {font_size}")
+        # Move to the beginning of the StringIO buffer
+        packet.seek(0)
         
-        # Create a new PDF with just the first page
-        new_doc = fitz.open()
-        new_doc.insert_pdf(doc, from_page=0, to_page=0)
-        new_page = new_doc[0]
+        # Create a new PDF with the text
+        new_pdf = PdfReader(packet)
         
-        # Remove the placeholder text
-        new_page.add_redact_annot(rect)
-        new_page.apply_redactions()
+        # Add the page from the template
+        writer.add_page(page)
         
-        # Ensure the name is properly encoded
-        if isinstance(name, bytes):
-            name = name.decode('utf-8')
+        # Add the text page
+        writer.add_page(new_pdf.pages[0])
         
-        # Calculate text position
-        text_width = fitz.get_text_length(name, fontname=font_name, fontsize=font_size)
-        x_centered = rect.x0 + (rect.width - text_width) / 2
-        y_centered = rect.y0 + (rect.height - font_size) / 2
+        # Save the output
+        output = io.BytesIO()
+        writer.write(output)
+        output.seek(0)
         
-        # Insert the name text
-        new_page.insert_text(
-            (x_centered, y_centered),
-            name,
-            fontname=font_name,
-            fontsize=font_size,
-            color=(0, 0, 0)
-        )
-        
-        # Save to a temporary file
-        temp_output = io.BytesIO()
-        new_doc.save(temp_output)
-        temp_output.seek(0)
-        
-        return temp_output
+        return output
     except Exception as e:
         logger.error(f"Error in create_pdf_with_name: {str(e)}")
         raise
     finally:
-        if doc:
-            doc.close()
-        if 'new_doc' in locals():
-            new_doc.close()
         gc.collect()
 
 def process_names_in_batches(names, template_path, placeholder, temp_dir, batch_size=1):
