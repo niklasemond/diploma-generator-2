@@ -54,36 +54,29 @@ def replace_text_in_pdf(template_path, name, placeholder):
             # Calculate the center position
             center_x = rect.x0 + (rect.width - text_width) / 2
             
-            # Create a new PDF with just this page
-            new_doc = fitz.open()
-            new_doc.insert_pdf(doc, from_page=page.number, to_page=page.number)
-            new_page = new_doc[0]
-            
-            # Get the page's content stream
-            xref = new_page.get_contents()[0]
-            stream = new_doc.xref_stream(xref)
-            
-            # Remove the placeholder text from the content stream
-            stream = stream.replace(placeholder.encode(), b'')
-            new_doc.update_stream(xref, stream)
+            # Remove the placeholder text
+            page.add_redact_annot(rect)
+            page.apply_redactions()
             
             # Insert the new name centered in the same area
-            new_page.insert_text(
+            page.insert_text(
                 (center_x, rect.y0),  # centered position
                 name,
                 fontsize=font_size,
                 color=(0, 0, 0),
                 render_mode=0
             )
-            
-            # Replace the original page with our modified page
-            page.clean_contents()
-            page.show_pdf_page(page.rect, new_doc, 0)
-            new_doc.close()
         
-        # Save to BytesIO
+        # Save to BytesIO with compression
         output = io.BytesIO()
-        doc.save(output)
+        doc.save(
+            output,
+            garbage=4,  # Maximum garbage collection
+            deflate=True,  # Compress streams
+            clean=True,  # Clean redundant elements
+            pretty=False,  # Don't pretty-print
+            linear=True  # Optimize for web viewing
+        )
         output.seek(0)
         doc.close()
         
