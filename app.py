@@ -97,8 +97,8 @@ def create_pdf_with_name(template_path, name, placeholder):
         # Add the page from the template
         writer.add_page(page)
         
-        # Add the text page
-        writer.add_page(new_pdf.pages[0])
+        # Overlay the text on the template page
+        page.merge_page(new_pdf.pages[0])
         
         # Save the output
         output = io.BytesIO()
