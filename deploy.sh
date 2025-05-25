@@ -1,16 +1,5 @@
 #!/bin/bash
 
-# Create fonts directory
-mkdir -p fonts
-
-# Copy the font file if it exists in the source
-if [ -f "/Users/niklasemond/Dropbox/Mac (2)/Downloads/MontessoriScript.ttf" ]; then
-    cp "/Users/niklasemond/Dropbox/Mac (2)/Downloads/MontessoriScript.ttf" fonts/
-    echo "Font file copied successfully"
-else
-    echo "Warning: Font file not found in source location"
-fi
-
 # Install dependencies
 pip install -r requirements.txt
 
