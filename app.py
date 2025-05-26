@@ -131,8 +131,8 @@ def upload_files():
                 flash('The names file is empty')
                 return redirect(request.url)
             
-            if len(names) > 100:
-                flash('Maximum 100 names allowed')
+            if len(names) > 500:
+                flash('Maximum 500 names allowed')
                 return redirect(request.url)
             
             logger.info(f"Processing {len(names)} names")
